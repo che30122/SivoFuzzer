@@ -55,6 +55,12 @@ SOFTWARE.
 #include <sys/types.h>
 #include "config_llvm.h"
 
+#ifdef CHE_DEBUG
+uint32_t __taken_init[MAX_BRANCHES_INSTRUMENTED];
+uint32_t *__taken=__taken_init;
+uint32_t __now_branch_init[MAX_BRANCHES_INSTRUMENTED];
+uint32_t *__now_branch=__now_branch_init;
+#endif
 
 uint32_t __branch_trace_init [MAX_BRANCHES_INSTRUMENTED];
 uint32_t __branch_taken_init [MAX_BRANCHES_INSTRUMENTED];
@@ -89,13 +95,24 @@ __thread uint32_t __afl_prev_loc;
   }                                             \
   else{                                         \
     _var = (_type *)malloc( sizeof(_type) * _size );  \
+    if (_var == (void *)-1) _exit(1);           \
+	  memset(_var,0,sizeof(_type)*_size); \
   }
-
+static void print_branch_taken(){
+	int  i;
+	for(i=0;i<MAX_BRANCHES_INSTRUMENTED ;i++){
+		if(__taken[i]==1){
+			printf("branch 0x%x taken\n",i);
+		}
+	}
+}
 
 
 static void set_shared_memory() {
-
-
+#ifdef CHE_DEBUG
+  SHM_OR_MALLOC(SHM_ENV_VAR_TAKEN, "taken", __taken, uint32_t, MAX_BRANCHES_INSTRUMENTED );
+  SHM_OR_MALLOC(SHM_ENV_VAR_TAKEN, "nowbranch", __now_branch, uint32_t, 1 );
+#endif
   SHM_OR_MALLOC(SHM_ENV_VAR_BRANCH_TRACE, "branchtrace", __branch_trace, uint32_t, MAX_BRANCHES_INSTRUMENTED );
   SHM_OR_MALLOC(SHM_ENV_VAR_BRANCH_TAKEN, "branchttaken", __branch_taken, uint32_t, MAX_BRANCHES_INSTRUMENTED );
   SHM_OR_MALLOC(SHM_ENV_VAR_BRANCH_VALUE1, "branchvalue1", __branch_values1, uint32_t, MAX_BRANCHES_INSTRUMENTED );
@@ -114,9 +131,14 @@ static void set_shared_memory() {
   __branch_instrument[3]  = 0;
   __branch_instrument[4]  = 0;
   __branch_instrument[5]  = 0;
-
+	__afl_area_ptr[0]=1;
 }
-
+void set_branch(uint32_t* p,int32_t v){
+	if(v==1){
+		*p=1;
+	}
+	return ;
+}
 
 static void start_forkserver()
 {
@@ -126,15 +148,15 @@ static void start_forkserver()
     int stdin_tty, ans;
 
     /* test if program is running as part of fork server */
-    if (getenv(ENV_VAR_MY_SERVER_ID))
-        server_id = atoi(getenv(ENV_VAR_MY_SERVER_ID));
+//    if (getenv(ENV_VAR_MY_SERVER_ID))
+  //      server_id = atoi(getenv(ENV_VAR_MY_SERVER_ID));
 
-    int ACTFORKSRV_FD = FORKSRV_FD + 2*server_id;
-    if (write(ACTFORKSRV_FD + 1, tmp, 4) != 4)
+//    int ACTFORKSRV_FD = FORKSRV_FD + 2*server_id;
+    if (write(FORKSRV_FD + 1, tmp, 4) != 4)
         return;
 
     /* test once and for all if stdin is tty backed or file backed */
-    stdin_tty = isatty(STDIN_FILENO);
+//    stdin_tty = isatty(STDIN_FILENO);
 
     /* fork client main loop */
     while (1) {
@@ -142,7 +164,7 @@ static void start_forkserver()
         int status;
 
         /* server died (maybe) */
-        if (read(ACTFORKSRV_FD, &was_killed, 4) != 4)
+        if (read(FORKSRV_FD, &was_killed, 4) != 4)
             _exit(1);
 
         /* spwan child from pre-main() checkpoint */
@@ -154,28 +176,28 @@ static void start_forkserver()
         if (!child_pid) {
             /* if stdin redirected from file, rewind cursor to start *
              * if pipe, lseek will fail but that's ok                */
-            if (!stdin_tty)
-                ans = lseek(STDIN_FILENO, 0, SEEK_SET);
+            //if (!stdin_tty)
+            //    ans = lseek(STDIN_FILENO, 0, SEEK_SET);
 
             /* reset shared map */
-            __afl_prev_loc = 0;
-            memset(__afl_area_ptr, 0, MAP_SIZE );
+            //__afl_prev_loc = 0;
+            //memset(__afl_area_ptr, 0, MAP_SIZE );
 
 
             /* terminate child communication to forkserver */
-            close(ACTFORKSRV_FD);
-            close(ACTFORKSRV_FD + 1);
+            close(FORKSRV_FD);
+            close(FORKSRV_FD + 1);
        
             /* break out of fork client loop */
             return;
         }
 
         /* fork client must wait for child and report to server */
-        if (write(ACTFORKSRV_FD + 1, &child_pid, 4) != 4)
+        if (write(FORKSRV_FD + 1, &child_pid, 4) != 4)
             _exit(1);
         if (waitpid(child_pid, &status, 0) < 0)
             _exit(1);
-        if (write(ACTFORKSRV_FD + 1, &status, 4) != 4)
+        if (write(FORKSRV_FD + 1, &status, 4) != 4)
             _exit(1);
     }
 }
@@ -187,6 +209,9 @@ __attribute__((constructor(0))) void __afl_auto_init(void)
 
   set_shared_memory();
   start_forkserver();
+#ifdef CHE_DEBUG
+  atexit(print_branch_taken);
+#endif
 }
 
 

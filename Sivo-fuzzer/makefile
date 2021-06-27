@@ -12,9 +12,9 @@ LLVM      = llvm
 
 # compilation related parameters
 CC        = gcc
-CFLAGS    = -O3 -ggdb -DSIVO_PATH=\"$(CDIR)\"
+CFLAGS    = -O3 -ggdb -DSIVO_PATH=\"$(CDIR)\" -DCHE_DEBUG
 CXX       = g++
-CXXFLAGS  = -O3 -std=c++14 -ggdb 
+CXXFLAGS  = -O3 -std=c++14 -ggdb -DCHE_DEBUG
 LIBS      = -lcrypto
 
 # fuzzer sources -> objects -> binary

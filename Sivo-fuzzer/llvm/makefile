@@ -3,10 +3,10 @@
 LLVM_CONFIG ?= llvm-config
 
 CFLAGS       = -O3 -funroll-loops 
-CFLAGS      += -Wall -g -Wno-pointer-sign  
+CFLAGS      += -Wall -g -Wno-pointer-sign   -DCHE_DEBUG
 
 CXXFLAGS     = -O3 -funroll-loops -std=c++11
-CXXFLAGS    += -Wall -g -Wno-pointer-sign -Wno-variadic-macros -Wno-unknown-warning-option
+CXXFLAGS    += -Wall -g -Wno-pointer-sign -Wno-variadic-macros -Wno-unknown-warning-option -DCHE_DEBUG
 
 CLANG_CFL    = `$(LLVM_CONFIG) --cxxflags` -fno-rtti -fpic $(CXXFLAGS)
 CLANG_LFL    = `$(LLVM_CONFIG) --ldflags` $(LDFLAGS)

@@ -55,9 +55,9 @@ SOFTWARE.
 #include <set>
 #include <algorithm>
 
-#include "llvm/ADT/Statistic.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/LegacyPassManager.h"
+#include <llvm/ADT/Statistic.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/LegacyPassManager.h>
 #include "llvm/IR/Module.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
@@ -122,6 +122,12 @@ namespace {
         GlobalVariable *BranchOperationPtr,
         GlobalVariable *New_Branch,
         GlobalVariable *ExtraParams
+#ifdef CHE_DEBUG
+	,
+        GlobalVariable *takenPtr,
+        GlobalVariable *now_branch,
+	uint32_t rand_start
+#endif
       );
 
       void instrument_one_coverage( 
@@ -162,6 +168,12 @@ void EnforcePass::instrument_one_trace( Module &M, IRBuilder<> &IRB, BasicBlock 
   GlobalVariable *BranchOperationPtr,
   GlobalVariable *New_Branch,
   GlobalVariable *ExtraParams
+#ifdef CHE_DEBUG
+  ,
+  GlobalVariable *takenPtr,
+  GlobalVariable *now_branch,
+  uint32_t rand_start
+#endif
  )
 {
       LLVMContext &C = M.getContext();
@@ -173,7 +185,7 @@ void EnforcePass::instrument_one_trace( Module &M, IRBuilder<> &IRB, BasicBlock 
 
 
       ConstantInt *CurBranch = ConstantInt::get(Int32Ty, use_address  );
-
+	//last_instruction->setMetadata("curBranch",MDNode::get(C,ConstantAsMetadata::get(CurBranch)));
       // Current index of the trace 
       LoadInst *New_Branch_Ptr = IRB.CreateLoad(New_Branch);
       New_Branch_Ptr->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));   
@@ -348,7 +360,24 @@ void EnforcePass::instrument_one_trace( Module &M, IRBuilder<> &IRB, BasicBlock 
           FILE *f = fopen(llvm_filename,"a+");
           fprintf(f,"%x %x %x\n",use_address, cond_branch_cmp_instruction_type, cond_branch_cmp_instruction_predicate_type );
           fclose(f);
+
         }
+#ifdef CHE_DEBUG
+	if(branch && branch->isConditional() ){
+		MDNode* temp_N = MDNode::get(C, ConstantAsMetadata::get(ConstantInt::get(C, llvm::APInt(64, (int64_t)use_address, false))));
+		branch->setMetadata("branch_addr", MDNode::get(C,temp_N));
+	//char debug_filename[1024];
+	//sprintf(debug_filename,"./llvm-ifs_debug");
+	//FILE *debug_f=fopen(debug_filename,"a+");
+	//std::string str;
+	//llvm::raw_string_ostream(str) << branch;
+	//fprintf(debug_f,"%x %x %x %s\n",use_address, cond_branch_cmp_instruction_type, cond_branch_cmp_instruction_predicate_type,branch->getName().str().c_str());
+	//fclose(debug_f);
+	}
+	/*else{
+		printf("no conditional branch\n")
+	}*/
+#endif
       }
 
       else if ( switcc ) {
@@ -441,6 +470,35 @@ void EnforcePass::instrument_one_trace( Module &M, IRBuilder<> &IRB, BasicBlock 
       // Store current branchval
       IRB.CreateStore(BranchVal, BranchTakenPtrIdx)->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
 
+#ifdef CHE_DEBUG
+      if(branch && branch->isConditional()){
+	      int32_t branch_addr=0;
+	      MDNode* N;
+      if((N=branch->getMetadata("branch_addr"))!=NULL){
+	      Constant* val = dyn_cast<ConstantAsMetadata>(dyn_cast<MDNode>(N->getOperand(0))->getOperand(0))->getValue();
+	     
+	     branch_addr=cast<ConstantInt>(val)->getSExtValue() ;
+	    branch_addr=branch_addr-rand_start; 
+	     printf("branch addr %d\n",branch_addr);
+      }
+      if(branch_addr>=0 && branch_addr< MAX_BRANCHES_INSTRUMENTED){
+	printf("branch addr %ld\n",branch_addr);
+      	LoadInst *ItakenPtr = IRB.CreateLoad(takenPtr);
+      	ItakenPtr->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));      
+	  Constant* callee_set_branch = M.getOrInsertFunction("set_branch",
+			                      Type::getVoidTy(M.getContext()), PointerType::getInt32PtrTy(M.getContext()),
+					                          Type::getInt32Ty(M.getContext()),NULL);
+	  
+      	Value *takenPtrIdx = IRB.CreateGEP(ItakenPtr, ConstantInt::get(Int32Ty,branch_addr));
+
+	Value* arg[2];
+	arg[0]=takenPtrIdx;
+	arg[1]=BranchVal;
+	IRB.CreateCall(callee_set_branch,arg);
+      }	
+//      	IRB.CreateStore(BranchVal, takenPtrIdx)->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));}
+      }
+#endif
 
       if( branch_found   || switch_found  )
       {
@@ -562,7 +620,15 @@ bool EnforcePass::runOnModule(Module &M) {
 
   IRBuilder<> IRB( C );
 
+#ifdef CHE_DEBUG
 
+  GlobalVariable *takenPtr =
+      new GlobalVariable(M, PointerType::get(Int32Ty, 0), false,
+                         GlobalValue::ExternalLinkage, 0, "__taken");
+  GlobalVariable *now_branch =
+      new GlobalVariable(M, PointerType::get(Int32Ty, 0), false,
+                         GlobalValue::ExternalLinkage, 0, "__now_branch");
+#endif
   GlobalVariable *BranchTracePtr =
       new GlobalVariable(M, PointerType::get(Int32Ty, 0), false,
                          GlobalValue::ExternalLinkage, 0, "__branch_trace");
@@ -628,13 +694,17 @@ bool EnforcePass::runOnModule(Module &M) {
       instrument_one_coverage( M, IRB, BB, term_inst, start_addr_rand +  inst_branches, 
         AFLMapPtr, AFLPrevLoc, ExtraParams ) ;              
 
-      
+#ifndef CHE_DEBUG      
       instrument_one_trace( M, IRB, BB, term_inst, start_addr_rand + inst_branches, 
         BranchTracePtr, BranchTakenPtr, BranchValue1Ptr, BranchValue2Ptr,   BranchValueDoublePtr,   
         BranchOperationPtr, New_Branch, ExtraParams );
-      
+#else
+      instrument_one_trace( M, IRB, BB, term_inst, start_addr_rand + inst_branches, 
+        BranchTracePtr, BranchTakenPtr, BranchValue1Ptr, BranchValue2Ptr,   BranchValueDoublePtr,   
+        BranchOperationPtr, New_Branch, ExtraParams ,takenPtr, now_branch,start_addr_rand);
+#endif
     }
-    printf("[Branches pass for  %25s  ] : Addr %8x  : Tot %4d   : real %4d : ifs %4d  :  switches %4d\n", 
+    printf("[Branches pass for  %25s  ] : start_Addr_rand %8x  : Tot %4d   : real %4d : ifs %4d  :  switches %4d\n", 
     M.getName().data(), start_addr_rand, 
     inst_branches,  inst_real_branches, inst_if_type, inst_switch_type  );
 
@@ -667,11 +737,13 @@ bool EnforcePass::runOnModule(Module &M) {
               if( it != map_BB_to_addr.end() )  
                 nexts.insert( it->second );
             }
-
-
-            fprintf(f,"%x %lx ", block_addr, nexts.size() );
+		
+		//MDNode *N=terminator->getMetadata("curBranch");
+		//Constant* val = dyn_cast<ConstantAsMetadata>(dyn_cast<MDNode>(N->getOperand(0))->getOperand(0))->getValue();
+		//int n=cast<ConstantInt>(val)->getSExtValue();
+            fprintf(f,"%x %lx ", block_addr , nexts.size() );
             for(auto it= nexts.begin(); it!= nexts.end(); it++)
-              fprintf(f,"%x ", *it);
+              fprintf(f,"%x ",*it);
             fprintf(f,"\n");
         }
 

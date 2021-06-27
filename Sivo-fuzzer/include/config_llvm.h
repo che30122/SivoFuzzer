@@ -10,8 +10,11 @@
 
 #define MAX_BRANCHES_INSTRUMENTED ( 1<<24 )   
 
+#define SHM_ENV_VAR_TAKEN		"__SHM_ID_TAKEN"
 
-#define SHM_ENV_VAR_AFL_MAP               "__SHM_ID_AFL_MAP"
+
+#define SHM_ENV_VAR_AFL_MAP               "__AFL_SHM_ID"
+/*"__SHM_ID_AFL_MAP"*/
 #define SHM_ENV_VAR_BRANCH_TRACE          "__SHM_ID_BRANCH_TRACE"
 #define SHM_ENV_VAR_BRANCH_TAKEN          "__SHM_ID_BRANCH_TAKEN"
 #define SHM_ENV_VAR_BRANCH_VALUE1         "__SHM_ID_BRANCH_VALUE1"
