@@ -85,7 +85,9 @@ typedef struct{
     uint32_t cmp_compare_predicate;
 
     int random_walk_score;
-
+	vector<uint32_t> out_nodes_vec;
+	vector<uint64_t> visit_time_vec;
+	uint64_t visited_time;
 
 }node_type;
 

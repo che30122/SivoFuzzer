@@ -38,7 +38,7 @@ SOFTWARE.
 #include "multi_arm_banditos.h"
 #include "config.h"    
 
-
+#define CHE_FUZZ 1
 
 vector <branch_address_pair> branches_with_dependency; 
 VM branch_addresses;
@@ -246,12 +246,17 @@ int main(int argc, char *argv[])
         //
         // Choose coverage type 
         // 0) Take into account all seeds, or 
-        // 1) only seeds that increase coverage (and NOT seeds that provide ONLY new logarithmic count) 
+        // 1) only seeds that increase coverage (and NOT seeds that provide ONLY new logarithmic count)
+#ifdef CHE_FUZZ
+       coverage_type=0;
+#else       
         coverage_type = mtr.rand() < FUZZER_COVERAGE_RATIO;
+#endif
 
         // 
         // Choose Fuzzer_strategy, i.e. either vanilla or data-flow.
         //        
+#ifndef CHE_FUZZ
         mab_recompute( mab_fuzzer_vanilla_or_dataflow );
         mab_recompute( mab_fuzzer_vanilla_or_dataflow_cov );
         vector <bool > use_choices = { true, true };
@@ -273,7 +278,11 @@ int main(int argc, char *argv[])
 
         vanilla_fuzzer  = fuzzer_type == 0;
         dataflow_fuzzer = fuzzer_type == 1;
-
+#else
+	fuzzer_type=0;
+	vanilla_fuzzer=1;
+	//dataflow_fuzzer=fuzzer_type=1;
+#endif
 
         START_TIMER(begin_time);
 
@@ -344,7 +353,8 @@ int main(int argc, char *argv[])
                 printf("No branch addresses produced from the testcase\n"); 
                 continue;
             }
-            
+//I should update the prob here	
+	//	continue;            
             // flush dependency every once in a while
             if( 0 == (mtr.randInt() % 10) )
                 branch_remove_all_dependencies();
@@ -697,8 +707,9 @@ int main(int argc, char *argv[])
 
         printf("\n");
         printf("*************************************************************\n");
-
-        
+	printf("nodes prob info:\n");
+	nodes_show_prob_info();
+        printf("*************************************************************\n");
     }
 
 

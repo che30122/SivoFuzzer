@@ -36,7 +36,8 @@ SOFTWARE.
 
 
 
-
+void nodes_add_out_node(uint32_t,uint32_t);
+void nodes_show_prob_info();
 node_type nodes_init_empty_node();
 void nodes_add_new_node( uint32_t node );
 bool nodes_exist(uint32_t node);

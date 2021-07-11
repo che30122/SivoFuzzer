@@ -458,15 +458,15 @@ void fuzzer( bool vanilla_fuzzer,
     auto time_pre_init  = TIME_DIFFERENCE_SECONDS( begin_time ) ;
     START_TIMER( time_init );
     init_fuzzer_bytes_mutation  ( no_execs_block, x, lenx , vanilla_fuzzer, original_input, one->trace_hash, begin_time );
-    init_fuzzer_mingle          ( no_execs_block, x, lenx , vanilla_fuzzer, begin_time );
+    //init_fuzzer_mingle          ( no_execs_block, x, lenx , vanilla_fuzzer, begin_time );
     if( vanilla_fuzzer ){
-        init_fuzzer_copyremove          ( no_execs_block, x, lenx , glob_iter, begin_time );
-        init_fuzzer_combiner        ( no_execs_block, x, lenx, min_running_time / 5.0, begin_time  );
+      //  init_fuzzer_copyremove          ( no_execs_block, x, lenx , glob_iter, begin_time );
+      //  init_fuzzer_combiner        ( no_execs_block, x, lenx, min_running_time / 5.0, begin_time  );
     }
     else{
         init_fuzzer_branches        ( no_execs_block, x, lenx, begin_time );
-        init_fuzzer_system          ( no_execs_block, x, lenx , original_input, begin_time );
-        init_fuzzer_branch_ga       ( no_execs_block, x, lenx, begin_time );
+      //  init_fuzzer_system          ( no_execs_block, x, lenx , original_input, begin_time );
+      //  init_fuzzer_branch_ga       ( no_execs_block, x, lenx, begin_time );
     }
     fuzzer_init_time        += TIME_DIFFERENCE_SECONDS( begin_time );
     auto time_only_init     =  TIME_DIFFERENCE_SECONDS( begin_time ) - time_pre_init;
@@ -475,6 +475,7 @@ void fuzzer( bool vanilla_fuzzer,
     //
     // Deactivate some fuzzers if they don't have "candidates"
     //
+/*
     vector <bool> use_fuzzer;
     for( int i=0; i<5; i++)
         use_fuzzer.push_back( true );
@@ -503,15 +504,15 @@ void fuzzer( bool vanilla_fuzzer,
             use_fuzzer[4] = false;
     }
 
-
-    if( !found_at_least_one ) return;
+*/
+    //if( !found_at_least_one ) return;
 
     // discounts
-    mab_recompute( mab_choice_fuzzer_vanilla );
+    /*mab_recompute( mab_choice_fuzzer_vanilla );
     mab_recompute( mab_choice_fuzzer_vanilla_cov     );
     mab_recompute( mab_choice_fuzzer_dataflow );
     mab_recompute( mab_choice_fuzzer_dataflow_cov     );
-
+	*/
 
     float   latest_wavg_testcases_per_iter  = wavg_testcases_per_iter;
     float   latest_wavg_testcases_per_time  = wavg_testcases_per_time;
@@ -520,11 +521,11 @@ void fuzzer( bool vanilla_fuzzer,
 
     auto time_prestart = TIME_DIFFERENCE_SECONDS( begin_time ) - time_only_init - time_pre_init ;
 
-    vector <int> one_runs;
+  /*  vector <int> one_runs;
     for( int i=0; i<use_fuzzer.size(); i++)
         if( use_fuzzer[i] )
             one_runs.push_back( i );
-    
+    */
     bool simple_run;
 
     while(1)
@@ -539,7 +540,8 @@ void fuzzer( bool vanilla_fuzzer,
 
 
         // choose the fuzzer
-        int fuzzer_choice = mab_sample( 
+	int fuzzer_choice;
+  /*      int fuzzer_choice = mab_sample( 
                 vanilla_fuzzer ? 
                 (coverage_type ? mab_choice_fuzzer_vanilla_cov  : mab_choice_fuzzer_vanilla   ) :
                 (coverage_type ? mab_choice_fuzzer_dataflow_cov : mab_choice_fuzzer_dataflow  ) ,                 
@@ -547,9 +549,9 @@ void fuzzer( bool vanilla_fuzzer,
                 PRINT_FUZZER_ITERATIONS , 
                 use_fuzzer
                 );
+*/
 
-
-        simple_run =  cur_iteration - 1 < one_runs.size();
+      /*  simple_run =  cur_iteration - 1 < one_runs.size();
         if( simple_run )
             fuzzer_choice = one_runs[ cur_iteration - 1 ];
 
@@ -560,7 +562,7 @@ void fuzzer( bool vanilla_fuzzer,
         
         fuzzer_current_main = fuzzer_choice;
         fuzzer_current_sub  = 0  ;
-
+*/
                 
         START_TIMER(timf)
         double begin_tot_fuzz_time          = tot_fuzz_time;
@@ -573,14 +575,15 @@ void fuzzer( bool vanilla_fuzzer,
 
         uint32_t    COV_begin                       = get_coverage_entries();
         uint32_t    COV_begin_all                   = get_coverage_entries_all();
-
-
+fuzzer_choice=1;
+vanilla_fuzzer=1;
         // execute no_execs_block of the chosen fuzzer
         if( vanilla_fuzzer){
-            if ( 0 == fuzzer_choice ) found_new = exec_block_fuzzer_mingle  ( min_running_time );
+ found_new = exec_block_bytes_mutation ( min_running_time );
+/*            if ( 0 == fuzzer_choice ) found_new = exec_block_fuzzer_mingle  ( min_running_time );
             if ( 1 == fuzzer_choice ) found_new = exec_block_bytes_mutation ( min_running_time );
             if ( 2 == fuzzer_choice ) found_new = exec_block_fuzzer_copyremove  ( min_running_time );
-            if ( 3 == fuzzer_choice ) found_new = exec_block_combiner        ( min_running_time );
+            if ( 3 == fuzzer_choice ) found_new = exec_block_combiner        ( min_running_time );*/
         }
         else{
             if ( 0 == fuzzer_choice ) found_new = exec_block_system         ( min_running_time );
@@ -599,14 +602,14 @@ void fuzzer( bool vanilla_fuzzer,
 
 
         auto tztim = TIME_DIFFERENCE_SECONDS(timf);
-        if( vanilla_fuzzer ){
+        /*if( vanilla_fuzzer ){
             mab_update( mab_choice_fuzzer_vanilla    , fuzzer_choice , (float)found_new,         tztim );
             mab_update( mab_choice_fuzzer_vanilla_cov, fuzzer_choice , (float)found_new_cov,     tztim );
         }
         else{
             mab_update( mab_choice_fuzzer_dataflow    , fuzzer_choice , (float)found_new,         tztim );
             mab_update( mab_choice_fuzzer_dataflow_cov, fuzzer_choice , (float)found_new_cov,     tztim );
-        }
+        }*/
 
 
 

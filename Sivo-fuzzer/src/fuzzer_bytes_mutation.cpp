@@ -22,7 +22,8 @@ SOFTWARE.
 */
 
 #include "fuzzer.h"
-
+#include "branches.h"
+#include "nodes.h"
 
 static byte *x;
 static int lenx;
@@ -55,7 +56,7 @@ static float time_spent;
 static uint64_t original_trace_hash;
 static set <int> mut_position;
 static int PARALLEL_POSITIONS = 1;
-
+extern map < branch_address_pair , branch_address_type > Branches;
 
 #define N 20
 #define CROSS_PERCT 80
@@ -115,6 +116,7 @@ void compute_one_fitness( node_gs &n )
     no_trials ++;
     write_bytes_to_binary_file( TMP_INPUT, n.bytes, n.lenx);
     int good_exec = run_one_fork( RUN_GETTER );
+    //TODO need to update the probability
     if( good_exec && execution_edge_coverage_update()  ){
         check_and_add_solution( TMP_INPUT, SOL_TYPE_MUTATE_RAND , ""  );
         no_found ++;
@@ -124,9 +126,50 @@ void compute_one_fitness( node_gs &n )
 
     n.fitness = 0;
     set <uint32_t> new_br;
+    map<int,int> counters;
     for( int i=0; i<__new_branch_index[0]; i++){
         if( BRANCH_IS_IMPORTANT(branches_operations[i]) ) 
         {
+	    //UPDATE
+		//printf("UPDATE\n");
+		//getchar();
+	    auto it =counters.find(branches_trace[i]);
+	    if(it==counters.end()){
+		    counters.insert({branches_trace[i],0});
+	    }
+	    else{
+		    it->second++;
+	    }
+	    it=counters.find(branches_trace[i]);
+		//import_branches
+	    branch_address_pair b=get_ba(it->first,it->second);
+	    //count out going edges of this branch
+	    int out_edge_n=2;
+	    int branch_type=UNPACK_BRANCH_TYPE(branches_operations[i]);
+		if(branch_type==BRANCH_TYPE_SWITCH){
+			out_edge_n=UNPACK_SWITCH_NUM_SUC(branches_operations[i]);
+		}
+		//update nodes
+		nodes_add_type( branches_trace[i] , branch_type );
+        	nodes_add_number_of_edges( branches_trace[i] , -1, out_edge_n );
+        	nodes_add_solved_value( branches_trace[i], branches_taken[i] );
+		//nodes_show_prob_info();
+		//update branches
+		auto B_it=Branches.find(b);
+		if(B_it==Branches.end()){
+			branch_insert_empty_branch(b);
+			B_it=Branches.find(b);
+			B_it->second.found_at_iter=0;
+			B_it->second.branch_type = branch_type;
+			B_it->second.max_out_edges = out_edge_n;
+		}
+		if(i+1<__new_branch_index[0]){
+			uint32_t next_node = branches_trace[i+1];
+			if( (B_it->second).edges.find(next_node) == (B_it->second).edges.end()  ){
+				(B_it->second).edges.insert( next_node );
+			}
+			nodes_add_out_node(branches_trace[i],branches_trace[i+1]);
+		}
             if( new_br.find( branches_trace[i] ) == new_br.end() )
             {
                 auto it = sv.find( branches_trace[i] );
@@ -190,6 +233,7 @@ void one_ga_step()
             else                        ml.push_back( false );
         }
         origin_no_active = mab_sample( mab_bytesmutate_vanilla_ga_no_mutations, mab_bytesmutate_vanilla_ga_no_mutations.size(), false, ml );
+	
         origin_no_active = mmax( origin_no_active, 0 );
         no_active = 1 << origin_no_active;
         if( no_active > lenx ) no_active = lenx;
@@ -317,17 +361,18 @@ void init_fuzzer_bytes_mutation(  int init_no_execs, byte *init_x, int init_lenx
     time_spent  = 0;
         
     mab_recompute( mab_bytesmutate_vanilla_ga_no_mutations );
+    /*
     mab_recompute( mab_bytesmutate_vanilla_simple_or_ga );
     mab_recompute( mab_bytesmutate_vanilla_simple_weights_simple_or_weighted );
     mab_recompute( mab_bytesmutate_data_lognumber );
     mab_recompute( mab_bytesmutate_data_rand_or_count );
-
-    vec_all_dep_bytes.clear();
+	*/
+    /*vec_all_dep_bytes.clear();
     weights_rand_bytes.clear();
     weights_known_bytes.clear();
     positions_known_bytes.clear();
     mut_position.clear();
-
+	*/
     ga_current_stage = 0;
     for( int i=0; i<N; i++){
         PopulationA[i].active = NULL;
@@ -338,6 +383,8 @@ void init_fuzzer_bytes_mutation(  int init_no_execs, byte *init_x, int init_lenx
     ga_generations_run = 0;
     GN                 = 20; 
     
+	PARALLEL_POSITIONS = 1 + (mtr.randInt() % 3);       
+	/*
     if( vanilla_fuzzer){
 
         type_vanilla_simple_or_ga = mab_sample( mab_bytesmutate_vanilla_simple_or_ga, 2, false, multiplier );        
@@ -362,7 +409,7 @@ void init_fuzzer_bytes_mutation(  int init_no_execs, byte *init_x, int init_lenx
                 weights_known_bytes.push_back( pow( it->second, 2) );
             }
         }
-    }
+    }*/
 
 
 }
@@ -380,19 +427,19 @@ void fini_fuzzer_bytes_mutation()
     
     if( vanilla_fuzzer ){
 
-        mab_update( mab_bytesmutate_vanilla_simple_or_ga, type_vanilla_simple_or_ga, start_found, time_spent ); 
-        if( 1 == type_vanilla_simple_or_ga){
+        //mab_update( mab_bytesmutate_vanilla_simple_or_ga, type_vanilla_simple_or_ga, start_found, time_spent ); 
+        //if( 1 == type_vanilla_simple_or_ga){
             if( no_active == (1 << (origin_no_active))  && no_trials > 0  && glob_iter > 1){
                 mab_update( mab_bytesmutate_vanilla_ga_no_mutations, origin_no_active,  no_found, no_trials );    
             }
-        }
+        //}
     }
 }
 
 
 bool can_run_bytes_mutation( )
 {
-    return lenx > 0 && ( vanilla_fuzzer || vec_all_dep_bytes.size() > 0 && weights_known_bytes.size() > 0 );
+    return lenx > 0 ;//&& ( vanilla_fuzzer || vec_all_dep_bytes.size() > 0 && weights_known_bytes.size() > 0 );
 }
 
 
@@ -411,9 +458,9 @@ int exec_block_bytes_mutation( float min_running_time )
 
         if( TIME_DIFFERENCE_SECONDS(mbegin_time) >= min_running_time ) break; 
 
-        if( vanilla_fuzzer){
+        //if( vanilla_fuzzer){
 
-            if( 0 == type_vanilla_simple_or_ga ){
+            /*if( 0 == type_vanilla_simple_or_ga ){
                 fuzzer_current_main = SOL_TYPE_MUTATE_RAND1;
                 type_weights_weigthed_or_simple = mab_sample( mab_bytesmutate_vanilla_simple_weights_simple_or_weighted, 2, false, multiplier );        
                 memcpy( y, x, lenx );
@@ -461,8 +508,13 @@ int exec_block_bytes_mutation( float min_running_time )
                 one_ga_step();
             }
             continue;
-        }
-
+	    */
+		
+                fuzzer_current_main = SOL_TYPE_MUTATE_RAND;
+		one_ga_step();
+	//	continue;
+        //}
+	/*
         if( 0 == vec_all_dep_bytes.size()   ) break;
         if( 0 == weights_known_bytes.size() ) break;
 
@@ -510,7 +562,7 @@ int exec_block_bytes_mutation( float min_running_time )
                 
         mab_update( mab_bytesmutate_data_lognumber,     log_how_many,       found_one_new, 1.0 ); 
         mab_update( mab_bytesmutate_data_rand_or_count, use_rand_or_count,  found_one_new, 1.0 ); 
-
+	*/
     }
 
     time_spent += TIME_DIFFERENCE_SECONDS ( begin_time_spent );

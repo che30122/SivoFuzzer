@@ -40,7 +40,36 @@ SOFTWARE.
 
 map <uint32_t,node_type> Nodes;
 
+void nodes_add_out_node(uint32_t node,uint32_t out_node){
+	auto it1=Nodes.find(node);
+	auto it2=Nodes.find(out_node);
+	if(it1==Nodes.end())
+		nodes_add_new_node( node );
+	if(it2==Nodes.end())
+		nodes_add_new_node(out_node);
+	it1=Nodes.find(node);
+	auto out=find(it1->second.out_nodes_vec.begin(),it1->second.out_nodes_vec.end(),out_node);
+	if(out!=it1->second.out_nodes_vec.end()){
+		auto index=distance(it1->second.out_nodes_vec.begin(),out);
+		it1->second.visit_time_vec[index]++;
+	}
+	else{
+		it1->second.out_nodes_vec.push_back(out_node);
+		it1->second.visit_time_vec.push_back(0);
+	}
+	it1->second.visited_time++;
+		
+}
 
+void nodes_show_prob_info(){
+	for(auto it=Nodes.begin();it!=Nodes.end();it++){
+		printf("Nodes : 0x%x (branch address):\n",it->first);
+		for(int j=0;j<it->second.out_nodes_vec.size();j++){
+			printf("out node: 0x%x (branch address) freq: %f ",it->second.out_nodes_vec[j],(double)it->second.visit_time_vec[j]/it->second.visited_time);
+		}
+		printf("\n");
+	}
+}
 uint32_t nodes_get_current_size()
 {
     return Nodes.size();
@@ -66,7 +95,7 @@ node_type nodes_init_empty_node()
     nod.cmp_compare_predicate = 0 ;
 
     nod.random_walk_score = 0;
-
+	nod.visited_time=0;
     return nod;
 }
 
